@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <title>CCTV Map</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    body { margin: 0; padding: 0; }
+    #map { width: 100%; height: 100vh; }
+
+    .layer-control {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      z-index: 10;
+      background: rgba(255, 255, 255, 0.9);
+      border-radius: 8px;
+      padding: 8px 12px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+      font-size: 13px;
+      line-height: 1.4;
+    }
+    .layer-control label {
+      display: block;
+      margin-bottom: 4px;
+    }
+    .layer-control input[type="text"] {
+      width: 140px;
+      margin-bottom: 4px;
+    }
+  </style>
+
+  <!-- ✅ services까지 붙여야 지오코더 사용 가능 -->
+  <script src="https://dapi.kakao.com/v2/maps/sdk.js?appkey={{ kakao_key }}&libraries=clusterer,services"></script>
+</head>
+<body>
+  <div class="layer-control">
+    <label><input type="checkbox" id="toggle-cctv" checked> CCTV</label>
+    <label><input type="checkbox" id="toggle-police" checked disabled> 경찰시설(예시)</label>
+    <hr>
+    <div>
+      <input id="start-input" type="text" placeholder="출발지">
+      <input id="end-input" type="text" placeholder="도착지">
+      <button id="btn-route">경로</button>
+    </div>
+    <div style="margin-top:6px;">
+      <button id="btn-reset" style="width:120px;">경로 초기화</button>
+      <button id="btn-sort" style="width:120px;">경유지 정렬</button>
+    </div>
+    <small style="color:#666;">우클릭하면 경유지 추가됨</small>
+  </div>
+
+  <div id="map"></div>
+
+  <script src="{{ url_for('static', filename='js/map.js') }}"></script>
+</body>
+</html>
