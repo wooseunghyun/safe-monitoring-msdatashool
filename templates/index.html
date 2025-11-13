@@ -24,25 +24,18 @@
       display: block;
       margin-bottom: 4px;
     }
-    .layer-control input[type="text"] {
-      width: 140px;
-      margin-bottom: 4px;
-    }
   </style>
 
-  <!-- ✅ services까지 붙여야 지오코더 사용 가능 -->
+  <!-- services 포함해야 지오코더, 클러스터러 사용 가능 -->
   <script src="https://dapi.kakao.com/v2/maps/sdk.js?appkey={{ kakao_key }}&libraries=clusterer,services"></script>
 </head>
 <body>
   <div class="layer-control">
     <label><input type="checkbox" id="toggle-cctv" checked> CCTV</label>
-    <label><input type="checkbox" id="toggle-police" checked disabled> 경찰시설(예시)</label>
     <hr>
-    <div>
-      <input id="start-input" type="text" placeholder="출발지">
-      <input id="end-input" type="text" placeholder="도착지">
-      <button id="btn-route">경로</button>
-    </div>
+    
+    <button id="btn-my-location" style="width:120px; margin-bottom:6px;">📍 내 위치</button>
+
     <div style="margin-top:6px;">
       <button id="btn-reset" style="width:120px;">경로 초기화</button>
       <button id="btn-sort" style="width:120px;">경유지 정렬</button>

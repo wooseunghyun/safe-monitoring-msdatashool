@@ -1,12 +1,10 @@
 // static/js/map.js
 kakao.maps.load(function () {
-  // 0) 필요하면 여기서 on/off 할 수 있음
-  const USE_OSRM = true;  // false로 두면 지금처럼 직선만 그림
-
-    // 👇 여기 추가: 어떤 프로필로 OSRM에 요청할지
-  // 서버가 foot을 지원하면 "foot", 자전거면 "bicycle"
-  // 지금 공개 OSRM이면 "driving" 그대로 두기
-  const OSRM_PROFILE = "foot";   // <-- 여기만 바꾸면 됨
+  // ===============================
+  // 기본 설정
+  // ===============================
+  const USE_OSRM = true;          // OSRM 먼저 시도
+  const OSRM_PROFILE = "foot";    // 서버가 foot 지원하면 foot, 아니면 driving
 
   // 1) 지도 기본
   const map = new kakao.maps.Map(document.getElementById("map"), {
@@ -47,36 +45,121 @@ kakao.maps.load(function () {
   });
 
   // =====================================
-  // B. 경로 상태
+  // B. 출발/도착 마커 (드래그로 위치 지정)
   // =====================================
-  const geocoder = new kakao.maps.services.Geocoder();
+  // 출발 마커
+  const startMarker = new kakao.maps.Marker({
+    position: new kakao.maps.LatLng(37.5665, 126.9780),
+    draggable: true,
+    map: map,
+  });
 
+  // 도착 마커
+  const endMarker = new kakao.maps.Marker({
+    position: new kakao.maps.LatLng(37.5650, 126.9780),
+    draggable: true,
+    map: map,
+  });
+
+  // ✅ 여기서 단 한 번만 routeState 선언
   const routeState = {
-    start: null,
-    end: null,
-    waypoints: []
+    start: {
+      lat: startMarker.getPosition().getLat(),
+      lng: startMarker.getPosition().getLng(),
+      name: "start",
+    },
+    end: {
+      lat: endMarker.getPosition().getLat(),
+      lng: endMarker.getPosition().getLng(),
+      name: "end",
+    },
+    waypoints: [],
   };
+
+// HTTPS 환경(또는 localhost)에서만 위치 정보 접근이 허용됨
+// ✅ 내 GPS 위치를 가져와서 출발지/도착지로 설정 (서울시청 fallback)
+if (navigator.geolocation) {
+  navigator.geolocation.getCurrentPosition(
+    (pos) => {
+      // ✅ 위치 가져오기 성공
+      const lat = pos.coords.latitude;
+      const lng = pos.coords.longitude;
+      const myLatLng = new kakao.maps.LatLng(lat, lng);
+
+      // 출발 마커 설정
+      startMarker.setPosition(myLatLng);
+      map.setCenter(myLatLng);
+
+      // routeState 출발지 갱신
+      routeState.start = { lat, lng, name: "내 위치" };
+
+      // 도착지는 내 위치에서 남쪽으로 200m 떨어진 곳
+      const offsetMeters = 200;
+      const offsetLat = lat - (offsetMeters / 111320);
+      const destLatLng = new kakao.maps.LatLng(offsetLat, lng);
+
+      endMarker.setPosition(destLatLng);
+      routeState.end = { lat: offsetLat, lng, name: "임시 도착지(200m 남쪽)" };
+
+      refreshRoute();
+
+      console.log("📍 GPS 성공: 현재 위치로 출발지 설정, 200m 남쪽에 도착지 설정");
+    },
+    (err) => {
+      // ⚠️ 위치 접근 실패 시 fallback
+      console.warn("⚠️ 위치 접근 실패:", err);
+      alert("위치 정보를 불러올 수 없습니다. 서울시청을 기준으로 설정합니다.");
+
+      const lat = 37.5665;  // 서울시청 위도
+      const lng = 126.9780; // 서울시청 경도
+
+      const startLatLng = new kakao.maps.LatLng(lat, lng);
+      const endLat = lat - (200 / 111320); // 200m 남쪽
+      const endLatLng = new kakao.maps.LatLng(endLat, lng);
+
+      // 출발/도착 마커 위치 설정
+      startMarker.setPosition(startLatLng);
+      endMarker.setPosition(endLatLng);
+      map.setCenter(startLatLng);
+
+      // routeState 갱신
+      routeState.start = { lat, lng, name: "서울시청(기본값)" };
+      routeState.end = { lat: endLat, lng, name: "임시 도착지(200m 남쪽)" };
+
+      refreshRoute();
+
+      console.log("📍 fallback: 서울시청을 기준으로 출발지 설정");
+    }
+  );
+} else {
+  alert("이 브라우저는 위치 정보를 지원하지 않습니다. 서울시청을 기준으로 설정합니다.");
+
+  const lat = 37.5665;
+  const lng = 126.9780;
+  const startLatLng = new kakao.maps.LatLng(lat, lng);
+  const endLat = lat - (200 / 111320);
+  const endLatLng = new kakao.maps.LatLng(endLat, lng);
+
+  startMarker.setPosition(startLatLng);
+  endMarker.setPosition(endLatLng);
+  map.setCenter(startLatLng);
+
+  routeState.start = { lat, lng, name: "서울시청(기본값)" };
+  routeState.end = { lat: endLat, lng, name: "임시 도착지(200m 남쪽)" };
+
+  refreshRoute();
+}
+
+
+  // 지도에서 그려진 선들 저장용
   let routeSegments = [];
 
-  // ---------------------------------------
-  // 유틸
-  // ---------------------------------------
-  function addressToLatLng(address) {
-    return new Promise((resolve, reject) => {
-      geocoder.addressSearch(address, (result, status) => {
-        if (status === kakao.maps.services.Status.OK) {
-          resolve({
-            lat: parseFloat(result[0].y),
-            lng: parseFloat(result[0].x),
-            name: address
-          });
-        } else {
-          reject("주소를 찾을 수 없습니다: " + address);
-        }
-      });
-    });
-  }
+  // 지오코더는 당장 안 써도 일단 만들어둠 (나중에 주소 입력 다시 살릴 때 쓰려고)
+  const geocoder = new kakao.maps.services.Geocoder();
 
+  // ---------------------------------------
+  // 유틸 함수들
+  // ---------------------------------------
   function distanceMeters(lat1, lng1, lat2, lng2) {
     const R = 6378137;
     const dLat = (lat2 - lat1) * Math.PI / 180;
@@ -126,12 +209,14 @@ kakao.maps.load(function () {
   }
 
   function pickColorByScore(score) {
-    if (score >= 10) return "#27ae60";
-    if (score >= 5) return "#f1c40f";
+    if (score >= 3) return "#27ae60";
+    if (score >= 1) return "#f1c40f";
     return "#e74c3c";
   }
 
-  // 기존 “직선으로 그리는” 버전
+  // ---------------------------------------
+  // 기존 직선 그리기 버전
+  // ---------------------------------------
   function drawRouteColored(points) {
     routeSegments.forEach(seg => seg.setMap(null));
     routeSegments = [];
@@ -167,11 +252,10 @@ kakao.maps.load(function () {
     map.setBounds(bounds);
   }
 
-  // -----------------------------
-  // OSRM 경로 그리기용 함수 추가
-  // -----------------------------
+  // ---------------------------------------
+  // OSRM 경로 그리기
+  // ---------------------------------------
   async function drawOsrmRoute(start, end, waypoints) {
-    // /api/route?start=lat,lng&end=lat,lng&via=lat,lng;lat,lng ...
     const params = new URLSearchParams();
     params.set("start", `${start.lat},${start.lng}`);
     params.set("end", `${end.lat},${end.lng}`);
@@ -181,7 +265,6 @@ kakao.maps.load(function () {
         waypoints.map(w => `${w.lat},${w.lng}`).join(";")
       );
     }
-
     params.set("profile", OSRM_PROFILE);
 
     const res = await fetch(`/api/route?${params.toString()}`);
@@ -224,7 +307,9 @@ kakao.maps.load(function () {
     map.setBounds(bounds);
   }
 
-  // 👉 여기만 바뀜: OSRM 먼저, 안 되면 기존 직선
+  // ---------------------------------------
+  // 라우트 다시 그리기 (OSRM 우선)
+  // ---------------------------------------
   async function refreshRoute() {
     if (!routeState.start || !routeState.end) return;
 
@@ -235,23 +320,43 @@ kakao.maps.load(function () {
           routeState.end,
           routeState.waypoints
         );
-        return;  // 성공했으면 여기서 끝
+        return;
       } catch (err) {
         console.warn("OSRM 실패, 직선 fallback:", err);
       }
     }
 
-    // 실패하거나 USE_OSRM=false 면 기존 방식
     const pts = [routeState.start, ...routeState.waypoints, routeState.end];
     drawRouteColored(pts);
   }
 
   // ---------------------------------------
-  // 1) 경로 초기화
+  // 마커 드래그 이벤트 → routeState 갱신
+  // ---------------------------------------
+  kakao.maps.event.addListener(startMarker, 'dragend', async function () {
+    const pos = startMarker.getPosition();
+    routeState.start = {
+      lat: pos.getLat(),
+      lng: pos.getLng(),
+      name: "start"
+    };
+    await refreshRoute();
+  });
+
+  kakao.maps.event.addListener(endMarker, 'dragend', async function () {
+    const pos = endMarker.getPosition();
+    routeState.end = {
+      lat: pos.getLat(),
+      lng: pos.getLng(),
+      name: "end"
+    };
+    await refreshRoute();
+  });
+
+  // ---------------------------------------
+  // 경로 초기화 버튼
   // ---------------------------------------
   function clearRoute() {
-    routeState.start = null;
-    routeState.end = null;
     routeState.waypoints = [];
     routeSegments.forEach(seg => seg.setMap(null));
     routeSegments = [];
@@ -262,7 +367,7 @@ kakao.maps.load(function () {
   });
 
   // ---------------------------------------
-  // 2) 삽입 + 2-opt 정렬
+  // 경유지 관련 (기존 그대로)
   // ---------------------------------------
   function orderWaypointsByBestInsertion(start, end, waypoints) {
     if (!start || !end) return waypoints;
@@ -345,27 +450,6 @@ kakao.maps.load(function () {
     await refreshRoute();
   });
 
-  // ---------------------------------------
-  // 버튼: 주소 -> 좌표 -> 상태 저장
-  // ---------------------------------------
-  document.getElementById("btn-route").addEventListener("click", async () => {
-    const s = document.getElementById("start-input").value.trim();
-    const e = document.getElementById("end-input").value.trim();
-    if (!s || !e) {
-      alert("출발지와 도착지를 입력하세요.");
-      return;
-    }
-    try {
-      const sCoord = await addressToLatLng(s);
-      const eCoord = await addressToLatLng(e);
-      routeState.start = sCoord;
-      routeState.end = eCoord;
-      await refreshRoute();
-    } catch (err) {
-      alert(err);
-    }
-  });
-
   // 지도 우클릭으로 경유지 추가
   kakao.maps.event.addListener(map, "rightclick", async (mouseEvent) => {
     const latlng = mouseEvent.latLng;
@@ -376,15 +460,96 @@ kakao.maps.load(function () {
     });
     await refreshRoute();
   });
-// =======================
-// 🎙 음성 녹음 & 업로드 (서버 경유 버전)
-// =======================
+
+  // =====================================
+  //  출발지 초기화 버튼
+  // =====================================
+
+// ✅ 내 위치 버튼
+document.getElementById("btn-my-location").addEventListener("click", () => {
+  goToMyLocation();
+});
+
+// ✅ 실제로 내 위치로 이동하는 함수
+async function goToMyLocation() {
+  if (!navigator.geolocation) {
+    alert("이 브라우저는 위치 정보를 지원하지 않습니다. 서울시청으로 이동합니다.");
+    setFallbackToCityHall();
+    return;
+  }
+
+  navigator.geolocation.getCurrentPosition(
+    (pos) => {
+      const lat = pos.coords.latitude;
+      const lng = pos.coords.longitude;
+      const myLatLng = new kakao.maps.LatLng(lat, lng);
+
+      // 출발지 마커 이동
+      startMarker.setPosition(myLatLng);
+      map.setCenter(myLatLng);
+
+      // routeState 갱신
+      routeState.start = { lat, lng, name: "내 위치" };
+
+      // 도착지는 200m 남쪽 (필요 없으면 이 부분 지워도 됨)
+      const offsetMeters = 200;
+      const offsetLat = lat - (offsetMeters / 111320);
+      const destLatLng = new kakao.maps.LatLng(offsetLat, lng);
+      endMarker.setPosition(destLatLng);
+      routeState.end = { lat: offsetLat, lng, name: "임시 도착지(200m 남쪽)" };
+
+      // 경로 다시 그림
+      refreshRoute();
+    },
+    (err) => {
+      console.warn("위치 접근 실패:", err);
+      alert("위치 정보를 불러올 수 없습니다. 서울시청으로 이동합니다.");
+      setFallbackToCityHall();
+    }
+  );
+}
+
+// ✅ fallback을 함수로 빼둠
+function setFallbackToCityHall() {
+  const lat = 37.5665;
+  const lng = 126.9780;
+  const startLatLng = new kakao.maps.LatLng(lat, lng);
+  const endLat = lat - (200 / 111320);
+  const endLatLng = new kakao.maps.LatLng(endLat, lng);
+
+  startMarker.setPosition(startLatLng);
+  endMarker.setPosition(endLatLng);
+  map.setCenter(startLatLng);
+
+  routeState.start = { lat, lng, name: "서울시청(기본값)" };
+  routeState.end = { lat: endLat, lng, name: "임시 도착지(200m 남쪽)" };
+
+  refreshRoute();
+}
+
+
+// =====================================
+// 🎙 음성 녹음 & 업로드 (서버 경유 버전) + user_id 포함
+// =====================================
 const recordBtn = document.getElementById("btn-record");
 const recordStatus = document.getElementById("rec-status");
 
 let mediaRecorder = null;
 let audioStream = null;
 let isRecording = false;
+
+// 0) user_id 생성/보관 (브라우저 최초 1회)
+function getOrCreateUserId() {
+  const KEY = "safe_user_id";
+  let uid = window.localStorage.getItem(KEY);
+  if (!uid) {
+    uid = (crypto && crypto.randomUUID) ? crypto.randomUUID() 
+                                        : 'uid-' + Math.random().toString(36).slice(2);
+    window.localStorage.setItem(KEY, uid);
+  }
+  return uid;
+}
+const USER_ID = getOrCreateUserId(); // 전역 보관
 
 recordBtn.addEventListener("click", async () => {
   if (!isRecording) {
@@ -394,23 +559,46 @@ recordBtn.addEventListener("click", async () => {
   }
 });
 
+let audioCtx, analyser, dataBuf;
+
+// ✅✅ 여기에 넣으세요: 텔레메트리 전송 함수 (startDbLoop보다 위)
+async function sendTelemetry(evt) {
+  try {
+    await fetch("/telemetry", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify(evt)
+    });
+  } catch (e) {
+    console.warn("telemetry send failed", e);
+  }
+}
+
 async function startRecording() {
   try {
-    // 1) 마이크 권한
-    audioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    audioStream = stream;
+    mediaRecorder = new MediaRecorder(stream);
 
-    // 2) MediaRecorder
-    mediaRecorder = new MediaRecorder(audioStream);
+    // ---- dB 측정 파이프 ----
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    const src = audioCtx.createMediaStreamSource(stream);
+    analyser = audioCtx.createAnalyser();
+    analyser.fftSize = 2048;
+    src.connect(analyser);
+    dataBuf = new Float32Array(analyser.fftSize);
 
-    // 3) 1분마다 블롭 나오면 서버로 전송
+    // 1~2초 마다 peak dB 계산해서 서버로 전송
+    startDbLoop();
+
+    // 1분마다 blob → 서버 전송
     mediaRecorder.addEventListener("dataavailable", async (event) => {
       if (event.data && event.data.size > 0) {
         await uploadToServer(event.data);
       }
     });
 
-    // 60,000ms = 1분마다 dataavailable
-    mediaRecorder.start(60_000);
+    mediaRecorder.start(60_000); // 60초마다 청크
 
     isRecording = true;
     recordBtn.textContent = "⏹ 녹음 중지";
@@ -421,7 +609,65 @@ async function startRecording() {
   }
 }
 
+async function calibrateSilence() {
+  const samples = [];
+  const start = performance.now();
+  while (performance.now() - start < 3000) { // 3초
+    analyser.getFloatTimeDomainData(dataBuf);
+    let peak = 0;
+    for (let i = 0; i < dataBuf.length; i++) {
+      const v = Math.abs(dataBuf[i]);
+      if (v > peak) peak = v;
+    }
+    samples.push(20 * Math.log10(peak || 1e-8));
+    await new Promise(r => setTimeout(r, 200)); // 0.2초 간격
+  }
+  const avg = samples.reduce((a,b)=>a+b,0)/samples.length;
+  localStorage.setItem("baseline_db", avg.toFixed(1));
+  alert(`기준 소음 레벨: ${avg.toFixed(1)} dBFS`);
+}
+
+
+let dbInterval = null;
+function startDbLoop() {
+  if (dbInterval) clearInterval(dbInterval);
+  dbInterval = setInterval(() => {
+    //마이크 입력을 -1.0 ~ +1.0 사이의 디지털 진폭값으로 제공
+    analyser.getFloatTimeDomainData(dataBuf);
+    //각 사용자의 마이크 장치에서 상대적인 세기
+    // peak amplitude 계산
+    let peak = 0;
+    for (let i = 0; i < dataBuf.length; i++) {
+      const v = Math.abs(dataBuf[i]);
+      if (v > peak) peak = v;
+    }
+    // 20*log10(peak). 0에 가까우면 -∞ → 아주 작은 바닥값 처리
+    const peakDb = 20 * Math.log10(peak || 1e-8);
+
+    sendTelemetry({
+      user_id: USER_ID,               // 앞서 만든 localStorage 기반
+      ts: new Date().toISOString(),
+      peak_db: peakDb,                // 예: -10 ~ -60dB 근처(마이크 게인/환경에 따라 다름)
+      baseline_db: Number(localStorage.getItem("baseline_db")) || -50,
+      chunk_ms: 2000                  // 샘플링 간격(여기선 2초)
+    });
+  }, 2000);
+}
+
+// ASA 예시
+
+// SELECT
+//   user_id,
+//   MAX(peak_db - baseline_db) AS delta_db,
+//   System.Timestamp AS wnd_end
+// INTO alerts
+// FROM telemetry TIMESTAMP BY ts
+// GROUP BY user_id, TumblingWindow(second, 60)
+// HAVING MAX(peak_db - baseline_db) > 30;  -- 기준보다 30dB 이상 상승 시 경보
+
+
 function stopRecording() {
+  if (dbInterval) clearInterval(dbInterval);
   if (mediaRecorder && mediaRecorder.state !== "inactive") {
     mediaRecorder.stop();
   }
@@ -433,13 +679,16 @@ function stopRecording() {
   recordStatus.textContent = "녹음 중지됨.";
 }
 
-// ✅ 이 부분이 Azure 직접 업로드 → 서버로 업로드로 바뀐 곳
 async function uploadToServer(blob) {
   const iso = new Date().toISOString().replace(/[:.]/g, "-");
-  const fileName = `audio-${iso}.webm`;
+  // 파일명에 user_id를 포함해 두면 탐색이 쉬움
+  const fileName = `user-${USER_ID}/audio-${iso}.webm`;
 
   const formData = new FormData();
   formData.append("file", blob, fileName);
+  formData.append("user_id", USER_ID);         // ✅ 필수
+  formData.append("ts", new Date().toISOString()); // 업로드 시각
+  // formData.append("room_id", "team6");       // 필요하면 추가 메타
 
   try {
     const res = await fetch("/upload-audio", {
@@ -458,5 +707,6 @@ async function uploadToServer(blob) {
     recordStatus.textContent = "서버 전송 오류";
   }
 }
+
 
 });

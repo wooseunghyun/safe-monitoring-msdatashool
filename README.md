@@ -52,6 +52,14 @@ python -m scripts.server.main
 PLATFORM_USER=your_username
 PLATFORM_PASS=your_password
 KAKAO_MAP_API_KEY=your_kakao_api_key
+PLATFORM_USER=your_bigdata-policing_id
+PLATFORM_PASS=your_bigdata-policing_password
+BlobserviceSASURL=
+SAS_TOKEN=
+ENDPOINT=
+AZURE_STORAGE_ACCOUNT_NAME=
+AZURE_STORAGE_ACCOUNT_KEY=
+AZURE_STORAGE_ACCOUNT_URL=
 ```
 
 > ⚠️ `.env` 파일은 `.gitignore`에 포함되어 있으므로 GitHub에 업로드되지 않습니다.
@@ -101,6 +109,14 @@ safe-monitoring-msdatashool/
 * 🔐 **환경변수 보안 관리**
 
   * `.env`를 통해 계정정보/API키 안전하게 로드
+
+---
+
+### 🌐 경로탐색(OSRM)
+지도 길찾기는 OSRM(Open Source Routing Machine)을 사용합니다.  
+로컬 도커 또는 Azure Container Instance 환경에서 실행할 수 있습니다.  
+자세한 설정 방법은 [scripts/osrm_setting_server/README.md](scripts/osrm_setting_server/README.md) 참고.
+
 
 ---
 
