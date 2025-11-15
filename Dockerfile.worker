@@ -1,20 +1,20 @@
-# Dockerfile.worker
+# Dockerfile.whisper
 FROM python:3.11-slim
 
-# 1) 시스템 패키지 (ffmpeg 필수)
-RUN apt-get update && apt-get install -y ffmpeg && apt-get clean
+# ffmpeg는 whisper 필수
+RUN apt-get update && apt-get install -y ffmpeg && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
-# 2) 코드 복사
-COPY . /app
+# 의존성 먼저 설치
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
 
-# 3) 파이썬 패키지 설치
-RUN pip install --no-cache-dir -r requirements.txt \
-    && pip install --no-cache-dir openai-whisper azure-storage-blob azure-eventhub python-dotenv
+# 프로젝트 전체 복사
+COPY . .
 
-# 4) 환경 변수 (필요시 일부 기본값)
-ENV PYTHONUNBUFFERED=1
+# 기본 타임존 같은 건 필요하면 추가
+# ENV TZ=Asia/Seoul
 
-# 5) 워커 시작 명령
+# whisper_worker 메인 루프 실행
 CMD ["python", "-m", "scripts.server.whisper_worker"]

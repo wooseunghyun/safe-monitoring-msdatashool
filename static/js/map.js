@@ -548,7 +548,7 @@ function setFallbackToCityHall() {
   let segmentTimer = null;  // N초 뒤에 stop() 호출 타이머
 
   // 한 파일 길이 (ms 단위) – 원하면 5000(5초), 60000(1분) 등으로 조절
-  const SEGMENT_MS = 30_000;   // 30초마다 완전한 webm 파일 1개씩 생성
+  const SEGMENT_MS = 10_000;   // 10초마다 완전한 webm 파일 1개씩 생성
 
   // 0) user_id 생성/보관 (브라우저 최초 1회)
   function getOrCreateUserId() {
@@ -608,29 +608,140 @@ function setFallbackToCityHall() {
     alert(`기준 소음 레벨: ${avg.toFixed(1)} dBFS`);
   }
 
-  // 2초마다 peak dB 보내는 루프
+
+  // 🔸 10초 동안 측정한 피크 dB를 live_uploads에 보내는 함수
+  async function sendPeakToLiveUploads(peakDb) {
+    try {
+      // 위치는 우선 routeState.start 기준으로 보냄 (GPS → 출발지에 이미 반영되어 있음)
+      const start = routeState.start || {};
+      const lat = start.lat ?? null;
+      const lng = start.lng ?? null;
+
+      const payload = {
+        user_id: USER_ID,
+        ts: new Date().toISOString(),
+        peak_db: peakDb,
+        lat,
+        lng,
+        window_sec: 10   // 대략 10초짜리 윈도우라는 뜻
+      };
+
+      const res = await fetch("/api/live_peak", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      if (!res.ok) {
+        console.warn("live_peak 전송 실패:", await res.text());
+      } else {
+        console.log("✅ live_peak 전송 완료:", peakDb.toFixed(1), "dB");
+      }
+    } catch (e) {
+      console.warn("live_peak 전송 중 오류:", e);
+    }
+  }
+
+  // 🔄 계속 측정하면서, 10초마다 "그 구간의 피크 dB"만 서버로 보내는 루프
+  // function startDbLoop() {
+  //   if (dbInterval) clearInterval(dbInterval);
+
+  //   let windowPeakDb = -1000;          // 현재 10초 구간에서의 최대값
+  //   let windowStart = performance.now();
+
+  //   dbInterval = setInterval(async () => {
+  //     if (!analyser || !dataBuf) return;
+
+  //     // 1) 지금 시점의 instantaneous peak dB 계산
+  //     analyser.getFloatTimeDomainData(dataBuf);
+  //     let peak = 0;
+  //     for (let i = 0; i < dataBuf.length; i++) {
+  //       const v = Math.abs(dataBuf[i]);
+  //       if (v > peak) peak = v;
+  //     }
+  //     const currentDb = 20 * Math.log10(peak || 1e-8);
+
+  //     // 2) windowPeakDb 갱신
+  //     if (currentDb > windowPeakDb) {
+  //       windowPeakDb = currentDb;
+  //     }
+
+  //     // 3) 10초 지났으면 서버로 전송하고 윈도우 초기화
+  //     const now = performance.now();
+  //     const elapsed = (now - windowStart) / 1000.0;
+
+  //     if (elapsed >= 10) {
+  //       if (windowPeakDb > -900) {  // 유효한 값이 있을 때만 전송
+  //         await sendPeakToLiveUploads(windowPeakDb);
+  //       }
+  //       // 새 윈도우 시작
+  //       windowPeakDb = -1000;
+  //       windowStart = now;
+  //     }
+
+  //   }, 300); // 0.3초마다 한 번씩 샘플링 (너무 자주 말고, 적당히 자주)
+  // }
+
+  // ✅ 현재 위치를 한 번만 가져오는 Promise 함수
+  function getCurrentPositionOnce(timeoutMs = 3000) {
+    return new Promise((resolve) => {
+      if (!navigator.geolocation) {
+        console.warn("이 브라우저는 위치 정보를 지원하지 않습니다.");
+        resolve(null);
+        return;
+      }
+
+      let done = false;
+
+      function ok(pos) {
+        if (done) return;
+        done = true;
+        resolve({
+          lat: pos.coords.latitude,
+          lng: pos.coords.longitude,
+        });
+      }
+
+      function err(e) {
+        if (done) return;
+        console.warn("getCurrentPositionOnce 에러:", e);
+        done = true;
+        resolve(null); // 실패하면 null로 넘기고, 나중에 fallback 쓰게 함
+      }
+
+      navigator.geolocation.getCurrentPosition(ok, err, {
+        enableHighAccuracy: true,
+        timeout: timeoutMs,
+        maximumAge: 5000, // 최근 위치 5초 이내면 재사용
+      });
+    });
+  }
+
+
+  //데시벨 저장
+  let windowPeakDb = -1000;
+
   function startDbLoop() {
     if (dbInterval) clearInterval(dbInterval);
+
     dbInterval = setInterval(() => {
       if (!analyser || !dataBuf) return;
 
       analyser.getFloatTimeDomainData(dataBuf);
       let peak = 0;
       for (let i = 0; i < dataBuf.length; i++) {
-        const v = Math.abs(dataBuf[i]);
-        if (v > peak) peak = v;
+        peak = Math.max(peak, Math.abs(dataBuf[i]));
       }
-      const peakDb = 20 * Math.log10(peak || 1e-8);
 
-      sendTelemetry({
-        user_id: USER_ID,
-        ts: new Date().toISOString(),
-        peak_db: peakDb,
-        baseline_db: Number(localStorage.getItem("baseline_db")) || -50,
-        chunk_ms: 2000
-      });
-    }, 2000);
+      const db = 20 * Math.log10(peak || 1e-8);
+      if (!isNaN(db)) {
+        windowPeakDb = Math.max(windowPeakDb, db);
+      }
+
+    }, 250);
   }
+
+
 
   // 🎙 녹음 시작(사용자가 버튼 누를 때 한 번만 호출)
   async function startRecording() {
@@ -757,6 +868,22 @@ function setFallbackToCityHall() {
     formData.append("user_id", USER_ID);
     formData.append("ts", new Date().toISOString());
 
+    // 🔥 세그먼트 동안 측정된 peak_db
+    formData.append("peak_db", windowPeakDb.toString());
+
+    // 🔹 ① 우선: 이 순간의 실제 GPS 위치를 가져와 본다
+    const geo = await getCurrentPositionOnce();
+    if (geo && geo.lat && geo.lng) {
+      // ✅ 현재 위치를 그대로 저장
+      formData.append("lat", geo.lat);
+      formData.append("lon", geo.lng);
+    } else if (routeState.start && routeState.start.lat && routeState.start.lng) {
+      // 🔁 GPS 실패하면 fallback: 현재 routeState 출발지
+      formData.append("lat", routeState.start.lat);
+      formData.append("lon", routeState.start.lng);
+  }
+  // 둘 다 없으면 위치 없이 저장
+
     try {
       const res = await fetch("/upload-audio", {
         method: "POST",
@@ -773,224 +900,9 @@ function setFallbackToCityHall() {
       console.error("서버 전송 오류:", err);
       recordStatus.textContent = "서버 전송 오류";
     }
+    
+    // 🔥 파일 1개 업로드 후 peak_db 리셋
+    windowPeakDb = -1000;
   }
-
-
-
-// // =====================================
-// // 🎙 음성 녹음 & 업로드 (서버 경유 버전) + user_id 포함
-// // =====================================
-// const recordBtn = document.getElementById("btn-record");
-// const recordStatus = document.getElementById("rec-status");
-
-// let mediaRecorder = null;
-// let audioStream = null;
-// let isRecording = false;
-
-// // 0) user_id 생성/보관 (브라우저 최초 1회)
-// function getOrCreateUserId() {
-//   const KEY = "safe_user_id";
-//   let uid = window.localStorage.getItem(KEY);
-//   if (!uid) {
-//     uid = (crypto && crypto.randomUUID) ? crypto.randomUUID() 
-//                                         : 'uid-' + Math.random().toString(36).slice(2);
-//     window.localStorage.setItem(KEY, uid);
-//   }
-//   return uid;
-// }
-// const USER_ID = getOrCreateUserId(); // 전역 보관
-
-// recordBtn.addEventListener("click", async () => {
-//   if (!isRecording) {
-//     await startRecording();
-//   } else {
-//     stopRecording();
-//   }
-// });
-
-// let audioCtx, analyser, dataBuf;
-
-// // ✅✅ 여기에 넣으세요: 텔레메트리 전송 함수 (startDbLoop보다 위)
-// async function sendTelemetry(evt) {
-//   try {
-//     await fetch("/telemetry", {
-//       method: "POST",
-//       headers: {"Content-Type": "application/json"},
-//       body: JSON.stringify(evt)
-//     });
-//   } catch (e) {
-//     console.warn("telemetry send failed", e);
-//   }
-// }
-
-// async function startRecording() {
-//   try {
-//     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-//     audioStream = stream;
-    
-//     const preferredType = "audio/webm; codecs=opus";
-//     if (MediaRecorder.isTypeSupported(preferredType)) {
-//       mediaRecorder = new MediaRecorder(stream, { mimeType: preferredType });
-//     } else {
-//       mediaRecorder = new MediaRecorder(stream); // fallback
-//     }
-//     console.log("opus 지원 여부:", MediaRecorder.isTypeSupported("audio/webm; codecs=opus"));
-//     console.log("실제 mediaRecorder.mimeType:", mediaRecorder.mimeType);
-    
-//     // ---- dB 측정 파이프 ----
-//     audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-//     const src = audioCtx.createMediaStreamSource(stream);
-//     analyser = audioCtx.createAnalyser();
-//     analyser.fftSize = 2048;
-//     src.connect(analyser);
-//     dataBuf = new Float32Array(analyser.fftSize);
-
-//     // 1~2초 마다 peak dB 계산해서 서버로 전송
-//     startDbLoop();
-
-//     // 1분마다 blob → 서버 전송
-//     // mediaRecorder.addEventListener("dataavailable", async (event) => {
-//     //   if (event.data && event.data.size > 0) {
-//     //     await uploadToServer(event.data);
-//     //   }
-//     // });
-//     let chunkCounter = 0;
-//     mediaRecorder.addEventListener("dataavailable", async (event) => {
-//       chunkCounter += 1;
-
-//       console.log(
-//         `[DEBUG] chunk #${chunkCounter}`,
-//         "type =", event.data.type,
-//         "size =", event.data.size
-//       );
-
-//       // 🔍 1) 디버그용: 앞으로 생성되는 각 chunk를 브라우저에서 바로 다운로드해보기
-//       //    (너무 많으면 첫 3개만 저장하게 조건 걸어도 됨)
-//       if (event.data && event.data.size > 0) {
-//         const url = URL.createObjectURL(event.data);
-//         const a = document.createElement("a");
-//         a.href = url;
-//         a.download = `from-browser-chunk${chunkCounter}-${new Date().toISOString().replace(/[:.]/g, "-")}.webm`;
-//         document.body.appendChild(a);
-//         a.click();
-//         a.remove();
-//         console.log(`[DEBUG] 브라우저에서 chunk #${chunkCounter} 다운로드 트리거`);
-//       }
-
-//       // 🔄 2) 서버로 업로드 (기존 로직 유지)
-//       if (event.data && event.data.size > 0) {
-//         await uploadToServer(event.data);
-//       }
-//     });
-
-//     mediaRecorder.start(10_000); // 5초마다 청크
-
-//     isRecording = true;
-//     recordBtn.textContent = "⏹ 녹음 중지";
-//     recordStatus.textContent = "녹음 중... 1분마다 서버로 전송합니다.";
-//   } catch (err) {
-//     console.error("녹음 시작 실패:", err);
-//     recordStatus.textContent = "녹음 시작 실패(콘솔 확인)";
-//   }
-// }
-
-// async function calibrateSilence() {
-//   const samples = [];
-//   const start = performance.now();
-//   while (performance.now() - start < 3000) { // 3초
-//     analyser.getFloatTimeDomainData(dataBuf);
-//     let peak = 0;
-//     for (let i = 0; i < dataBuf.length; i++) {
-//       const v = Math.abs(dataBuf[i]);
-//       if (v > peak) peak = v;
-//     }
-//     samples.push(20 * Math.log10(peak || 1e-8));
-//     await new Promise(r => setTimeout(r, 200)); // 0.2초 간격
-//   }
-//   const avg = samples.reduce((a,b)=>a+b,0)/samples.length;
-//   localStorage.setItem("baseline_db", avg.toFixed(1));
-//   alert(`기준 소음 레벨: ${avg.toFixed(1)} dBFS`);
-// }
-
-
-// let dbInterval = null;
-// function startDbLoop() {
-//   if (dbInterval) clearInterval(dbInterval);
-//   dbInterval = setInterval(() => {
-//     //마이크 입력을 -1.0 ~ +1.0 사이의 디지털 진폭값으로 제공
-//     analyser.getFloatTimeDomainData(dataBuf);
-//     //각 사용자의 마이크 장치에서 상대적인 세기
-//     // peak amplitude 계산
-//     let peak = 0;
-//     for (let i = 0; i < dataBuf.length; i++) {
-//       const v = Math.abs(dataBuf[i]);
-//       if (v > peak) peak = v;
-//     }
-//     // 20*log10(peak). 0에 가까우면 -∞ → 아주 작은 바닥값 처리
-//     const peakDb = 20 * Math.log10(peak || 1e-8);
-
-//     sendTelemetry({
-//       user_id: USER_ID,               // 앞서 만든 localStorage 기반
-//       ts: new Date().toISOString(),
-//       peak_db: peakDb,                // 예: -10 ~ -60dB 근처(마이크 게인/환경에 따라 다름)
-//       baseline_db: Number(localStorage.getItem("baseline_db")) || -50,
-//       chunk_ms: 2000                  // 샘플링 간격(여기선 2초)
-//     });
-//   }, 2000);
-// }
-
-// // ASA 예시
-
-// // SELECT
-// //   user_id,
-// //   MAX(peak_db - baseline_db) AS delta_db,
-// //   System.Timestamp AS wnd_end
-// // INTO alerts
-// // FROM telemetry TIMESTAMP BY ts
-// // GROUP BY user_id, TumblingWindow(second, 60)
-// // HAVING MAX(peak_db - baseline_db) > 30;  -- 기준보다 30dB 이상 상승 시 경보
-
-
-// function stopRecording() {
-//   if (dbInterval) clearInterval(dbInterval);
-//   if (mediaRecorder && mediaRecorder.state !== "inactive") {
-//     mediaRecorder.stop();
-//   }
-//   if (audioStream) {
-//     audioStream.getTracks().forEach(t => t.stop());
-//   }
-//   isRecording = false;
-//   recordBtn.textContent = "🎙 녹음 시작";
-//   recordStatus.textContent = "녹음 중지됨.";
-// }
-
-// async function uploadToServer(blob) {
-//   const iso = new Date().toISOString().replace(/[:.]/g, "-");
-//   const fileName = `audio-${iso}.webm`;
-
-//   const formData = new FormData();
-//   formData.append("file", blob, fileName);
-//   formData.append("user_id", USER_ID);         // ✅ 필수
-//   formData.append("ts", new Date().toISOString()); // 업로드 시각
-//   // formData.append("room_id", "team6");       // 필요하면 추가 메타
-
-//   try {
-//     const res = await fetch("/upload-audio", {
-//       method: "POST",
-//       body: formData
-//     });
-
-//     if (!res.ok) {
-//       console.error("서버 업로드 실패", await res.text());
-//       recordStatus.textContent = "서버 업로드 실패";
-//     } else {
-//       recordStatus.textContent = `서버 업로드 성공: ${fileName}`;
-//     }
-//   } catch (err) {
-//     console.error("서버 전송 오류:", err);
-//     recordStatus.textContent = "서버 전송 오류";
-//   }
-// }
-
 
 });

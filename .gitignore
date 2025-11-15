@@ -6,6 +6,26 @@ __pycache__/
 # C extensions
 *.so
 
+#backup
+*_old.*
+
+# Azurite
+__azurite_db_blob__.json
+__azurite_db_blob_extent__.json
+azurite_*
+
+# Local DB 
+uploads.db
+*.sqlite3
+
+# Downloads / Large raw data
+*.pbf
+*.osm
+*.zip
+*.csv
+*.parquet
+*.xlsx
+
 # Distribution / packaging
 .Python
 build/

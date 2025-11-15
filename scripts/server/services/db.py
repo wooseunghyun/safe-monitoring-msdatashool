@@ -15,10 +15,10 @@ def init(db_path):
     """)
     con.commit(); con.close()
 
-def log_upload(db_path, user_id, blob_name, ts_iso, size_bytes, mime, ip):
+def log_upload(db_path, user_id, blob_name, ts_iso, size_bytes, mime, ip, lat=None, lon=None):
     con = _conn(db_path); cur = con.cursor()
     cur.execute("""INSERT INTO uploads
-      (user_id, blob_name, ts, size_bytes, mime, ip)
-      VALUES (?, ?, ?, ?, ?, ?)""",
-      (user_id, blob_name, ts_iso, size_bytes, mime, ip))
+      (user_id, blob_name, ts, size_bytes, mime, ip, lat, lon)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+      (user_id, blob_name, ts_iso, size_bytes, mime, ip, lat, lon))
     con.commit(); con.close()
