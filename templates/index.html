@@ -30,6 +30,39 @@
   <script src="https://dapi.kakao.com/v2/maps/sdk.js?appkey={{ kakao_key }}&libraries=clusterer,services"></script>
 </head>
 <body>
+  <!-- 🚨 신고 중 배너 (여기에 추가) -->
+  <div id="alert-banner" style="
+      display:none;
+      position:fixed;
+      top:0;
+      left:0;
+      right:0;
+      z-index:9999;
+      background:#b91c1c;
+      color:white;
+      padding:10px 16px;
+      font-size:14px;
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+  ">
+      <div>
+          ⚠ 현재 <strong>신고를 진행 중</strong>입니다.
+      </div>
+      <button id="alert-cancel-btn" style="
+          background:white;
+          color:#b91c1c;
+          border:none;
+          padding:6px 12px;
+          border-radius:4px;
+          cursor:pointer;
+          font-weight:bold;
+      ">
+          신고 취소
+      </button>
+  </div>
+  <!-- 🚨 신고 배너 끝 -->
+
   <div class="layer-control">
     <label><input type="checkbox" id="toggle-cctv" checked> CCTV</label>
     <hr>

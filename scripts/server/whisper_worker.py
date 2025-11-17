@@ -1,5 +1,6 @@
 # scripts/server/whisper_worker.py
 import os
+import io
 import json
 import tempfile
 from datetime import datetime
@@ -10,7 +11,7 @@ from dotenv import load_dotenv
 from azure.storage.blob import BlobServiceClient
 from azure.eventhub import EventHubProducerClient, EventData
 from azure.core.exceptions import ResourceNotFoundError
-import whisper
+from openai import AzureOpenAI
 import psycopg2
 
 # -----------------------------------
@@ -70,18 +71,58 @@ if EH_CONN and EH_NAME:
 else:
     print("[EH] transcripts EventHub 비활성 (환경변수 없음)")
 
+# -----------------------------------
+# 1) Azure OpenAI (gpt-4o-mini-transcribe)
+# -----------------------------------
 
-# -----------------------------------
-# 1) Whisper 모델
-# -----------------------------------
-print("[Whisper] loading model 'small' ...")
-model = whisper.load_model("small")
-print("[Whisper] model loaded.")
+AOAI_ENDPOINT = os.getenv("AZURE_OPENAI_ENDPOINT")
+AOAI_API_KEY = os.getenv("AZURE_OPENAI_API_KEY") or os.getenv("AZURE_OPENAI_KEY")
+AOAI_API_VERSION = os.getenv("AZURE_OPENAI_API_VERSION")  # 포털에 나온 버전으로 설정 필요
+AOAI_TRANSCRIBE_DEPLOYMENT = os.getenv(
+    "AZURE_OPENAI_TRANSCRIBE_DEPLOYMENT",  # 예: "gpt4o-mini-stt" (배포 이름)
+)
+
+if not (AOAI_ENDPOINT and AOAI_API_KEY and AOAI_API_VERSION and AOAI_TRANSCRIBE_DEPLOYMENT):
+    raise RuntimeError(
+        "Azure OpenAI STT용 환경변수가 누락되었습니다. "
+        "(AZURE_OPENAI_ENDPOINT, AZURE_OPENAI_API_KEY, "
+        "AZURE_OPENAI_API_VERSION, AZURE_OPENAI_TRANSCRIBE_DEPLOYMENT)"
+    )
+
+aoai_client = AzureOpenAI(
+    azure_endpoint=AOAI_ENDPOINT,
+    api_key=AOAI_API_KEY,
+    api_version=AOAI_API_VERSION,
+)
+
+print("[AOAI] gpt-4o-mini-transcribe 클라이언트 초기화 완료")
 
 
 # -----------------------------------
 # 2) DB 처리 함수들 (PostgreSQL, live_uploads)
 # -----------------------------------
+
+def clean_system_prompt(text: str) -> str:
+    """
+    STT 결과에서 시스템 프롬프트가 문자열로 섞여 들어온 경우 제거해주는 함수
+    """
+    if not text:
+        return ""
+
+    BLOCK_LIST = [
+        "중요: 이 오디오는 사용자의 실제 말소리만 받아 적으세요",
+        "타자 소리, 마우스 클릭, 책상 두드리는 소리",
+        "사람의 말소리가 전혀 없으면 빈 문자열을 반환하세요",
+        "말소리가 아닌 잡음은 절대 한국어 문장으로 추론하지 마세요",
+        "숨소리, 잡음, 배경 음악, TV/라디오 등 비음성 소리는 무시하세요",
+    ]
+
+    cleaned = text
+    for phrase in BLOCK_LIST:
+        cleaned = cleaned.replace(phrase, "")
+
+    return cleaned.strip()
+
 
 
 def get_pending_rows(limit=5):
@@ -112,7 +153,7 @@ def get_pending_rows(limit=5):
 
 def update_with_stt(id_, text, risk_level):
     """
-    Whisper 결과와 risk_level 업데이트
+    STT 결과와 risk_level 업데이트
     """
     conn = get_pg_conn()
     cur = conn.cursor()
@@ -155,9 +196,26 @@ def classify_risk(text: str) -> str:
         return "LOW"
     return "NONE"
 
+# -----------------------------------
+# 3-1) 무음 / 짧은 오디오 감지 (헤uristic)
+# -----------------------------------
+
+
+def is_probably_silence(audio_bytes: bytes, size_threshold: int = 4000) -> bool:
+    """
+    아주 단순한 휴리스틱:
+    - 파일 크기가 size_threshold 바이트보다 작으면 '거의 무음'이라고 가정.
+    - threshold 값은 환경에 맞게 조정 가능.
+    """
+    size = len(audio_bytes)
+    if size < size_threshold:
+        print(f"[STT] very small audio ({size} bytes) → treat as silence, skip STT")
+        return True
+    return False
+
 
 # -----------------------------------
-# 4) Blob URL → Whisper STT
+# 4) Blob URL → Azure OpenAI STT
 # -----------------------------------
 
 
@@ -180,9 +238,43 @@ def _extract_blob_name_from_url(audio_url: str) -> str:
     return blob_name
 
 
+def _azure_transcribe_bytes(audio_bytes: bytes, filename: str = "audio.webm") -> str:
+    """
+    Azure OpenAI gpt-4o-mini-transcribe 호출
+    """
+    file_obj = io.BytesIO(audio_bytes)
+    # 일부 클라이언트는 name 속성을 참조하므로 넣어줌
+    file_obj.name = filename
+
+    print("[STT] Azure OpenAI gpt-4o-mini-transcribe 호출...")
+    # language="ko" 를 넣어주면 한국어에서 조금 더 안정적인 편이라고 알려져 있음 (추측입니다).
+    resp = aoai_client.audio.transcriptions.create(
+        model=AOAI_TRANSCRIBE_DEPLOYMENT,  # 배포 이름
+        file=file_obj,
+        language="ko",
+        prompt=(
+        "중요: 이 오디오는 사용자의 실제 말소리만 받아 적으세요. "
+        "타자 소리, 마우스 클릭, 책상 두드리는 소리, 숨소리, 잡음, "
+        "배경 음악, TV/라디오 등 비음성 소리는 무시하세요. "
+        "사람의 말소리가 전혀 없으면 빈 문자열을 반환하세요. "
+        "말소리가 아닌 잡음은 절대 한국어 문장으로 추론하지 마세요."
+        )
+        # 필요하면 prompt, temperature 등 추가 가능
+    )
+
+    # Python SDK 기준으로 resp.text 또는 dict["text"] 형태라서 둘 다 시도
+    text = getattr(resp, "text", None) or getattr(resp, "completion", None)
+    if text is None and isinstance(resp, dict):
+        text = resp.get("text") or resp.get("completion", "")
+
+    text = (text or "").strip()
+    print(f"[STT] text: {text[:60]}{'...' if len(text) > 60 else ''}")
+    return text
+
+
 def transcribe_url(audio_url: str) -> str:
     """
-    Blob URL에서 파일 다운로드 → Whisper 실행 → 텍스트 반환
+    Blob URL에서 파일 다운로드 → Azure OpenAI STT 실행 → 텍스트 반환
     """
     if not audio_url:
         return ""
@@ -198,22 +290,13 @@ def transcribe_url(audio_url: str) -> str:
         print("[STT] blob not found:", blob_name)
         return ""
 
-    tmp = tempfile.NamedTemporaryFile(suffix=".webm", delete=False)
-    try:
-        tmp.write(data)
-        tmp.flush()
-        tmp.close()
-
-        print("[STT] running whisper...")
-        result = model.transcribe(tmp.name, language="ko")
-        text = result.get("text", "").strip()
-        print(f"[STT] text: {text[:60]}{'...' if len(text) > 60 else ''}")
-        return text
-    finally:
-        try:
-            os.remove(tmp.name)
-        except OSError:
-            pass
+    # 🔹 무음 / 너무 짧은 오디오는 STT 호출 자체를 스킵
+    if is_probably_silence(data):
+        # 빈 문자열을 반환하면 risk_level은 NONE 으로, stt_text는 "" 로 저장됨
+        return ""
+    
+    # 더 이상 로컬 Whisper + 임시파일 사용 안 함
+    return _azure_transcribe_bytes(data, filename=os.path.basename(blob_name) or "audio.webm")
 
 
 # -----------------------------------
@@ -258,9 +341,10 @@ def run_once(limit=5):
 
         text = ""
         try:
-            text = transcribe_url(audio_url)
+            text_raw = transcribe_url(audio_url)
+            text = clean_system_prompt(text_raw)
         except Exception as e:
-            print("❌ Whisper error:", e)
+            print("❌ Azure STT error:", e)
 
         risk = classify_risk(text)
 
@@ -288,7 +372,7 @@ def run_once(limit=5):
 if __name__ == "__main__":
     import time
 
-    print("[Worker] start loop (live_uploads 기반 STT)")
+    print("[Worker] start loop (live_uploads 기반 STT, Azure OpenAI 사용)")
 
     while True:
         try:

@@ -528,6 +528,46 @@ function setFallbackToCityHall() {
 }
 
   // =====================================
+  // 🚨 신고 배너 UI + 상태 조회 + 신고 취소
+  // =====================================
+  const alertBanner = document.getElementById("alert-banner");
+  const alertCancelBtn = document.getElementById("alert-cancel-btn");
+
+  function setAlertUI(isAlerting) {
+    if (!alertBanner) return;  // 템플릿에 없으면 무시
+    alertBanner.style.display = isAlerting ? "flex" : "none";
+  }
+
+  async function fetchAlertStatus() {
+    try {
+      const res = await fetch("/api/alerts/status");
+      if (!res.ok) return;
+
+      const data = await res.json();
+      if (!data || typeof data.alerting === "undefined") return;
+
+      setAlertUI(data.alerting);
+    } catch (err) {
+      console.error("alert status error", err);
+    }
+  }
+
+  if (alertCancelBtn) {
+    alertCancelBtn.addEventListener("click", async () => {
+      if (!confirm("정말 신고를 중지하시겠습니까?")) return;
+
+      try {
+        const res = await fetch("/api/alerts/cancel", { method: "POST" });
+        if (res.ok) {
+          setAlertUI(false);
+        }
+      } catch (err) {
+        console.error("alert cancel error", err);
+      }
+    });
+  }
+
+  // =====================================
   // 🎙 음성 녹음 & 업로드 (서버 경유 버전) + user_id 포함
   // =====================================
   const recordBtn = document.getElementById("btn-record");
@@ -548,7 +588,7 @@ function setFallbackToCityHall() {
   let segmentTimer = null;  // N초 뒤에 stop() 호출 타이머
 
   // 한 파일 길이 (ms 단위) – 원하면 5000(5초), 60000(1분) 등으로 조절
-  const SEGMENT_MS = 10_000;   // 10초마다 완전한 webm 파일 1개씩 생성
+  const SEGMENT_MS = 5_000;   // 10초마다 완전한 webm 파일 1개씩 생성
 
   // 0) user_id 생성/보관 (브라우저 최초 1회)
   function getOrCreateUserId() {
@@ -904,5 +944,9 @@ function setFallbackToCityHall() {
     // 🔥 파일 1개 업로드 후 peak_db 리셋
     windowPeakDb = -1000;
   }
+  // 페이지 로드 시 한 번 상태 확인
+  fetchAlertStatus();
 
+  // 이후 10초마다 한 번씩 상태 다시 확인 (필요하면 간격 조절 가능)
+  setInterval(fetchAlertStatus, 5000);
 });

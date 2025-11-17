@@ -6,6 +6,7 @@ from scripts.server.routes.upload_audio import bp as upload_bp
 from scripts.server.routes.telemetry import bp as telemetry_bp
 from scripts.server.routes.live_peak import bp as live_peak_bp
 from scripts.server.services import db as dbsvc
+from scripts.server.routes.alerts import bp as alerts_bp
 import pathlib
 
 def create_app():
@@ -21,6 +22,7 @@ def create_app():
     app.register_blueprint(upload_bp)
     app.register_blueprint(telemetry_bp)
     app.register_blueprint(live_peak_bp)
+    app.register_blueprint(alerts_bp)
     return app
 
 if __name__ == "__main__":

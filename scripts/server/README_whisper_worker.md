@@ -53,7 +53,7 @@ ACI 컨테이너 실행 시 다음 환경 변수가 반드시 필요합니다:
 프로젝트 루트에서 실행:
 
 ```powershell
-docker build -t whisper-worker -f scripts/server/Dockerfile.whisper .
+docker build -t whisper-worker:latest -f Dockerfile.worker .
 ```
 
 이미지 확인:
@@ -122,7 +122,9 @@ az container create `
 # 🔍 4. Whisper Worker 로그 확인
 
 ```powershell
-az container logs -g "2dt-1st-team6" -n "whisper-worker"
+az container logs -g "2dt-1st-team6" -n "whisper-worker-v2"
+az container attach -g 2dt-1st-team6 -n aoai-stt-worker-v2
+
 ```
 
 로그 예시:
