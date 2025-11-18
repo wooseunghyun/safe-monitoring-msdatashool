@@ -260,6 +260,7 @@ if (navigator.geolocation) {
 
     return distanceMeters(py, px, yy, xx);
   }
+  const RADIUS = 40;
 
   function calcCctvScoreNearSegment(p1, p2, radiusMeters) {
     if (!cctvData || cctvData.length === 0) return 0;
@@ -274,6 +275,46 @@ if (navigator.geolocation) {
     }
     return count;
   }
+
+  // ✅ CCTV + 안심벨 모두 반영해서 "안전 점수" 계산
+function calcSafetyScoreNearSegment(p1, p2, radiusMeters) {
+  let score = 0;
+
+  // CCTV 반경 (조금 좁게, 예: 50m)
+  const CCTV_RADIUS = 40;
+
+  if (cctvData && cctvData.length) {
+    for (const c of cctvData) {
+      const d = pointToSegmentDistanceMeters(
+        c.lng, c.lat,
+        p1.lng, p1.lat,
+        p2.lng, p2.lat
+      );
+      if (d <= CCTV_RADIUS) {
+        score += 1;          // CCTV 1점 (원하면 가중치 조절 가능)
+      }
+    }
+  }
+
+  // 안심벨 반경 (조금 더 빡빡하게, 예: 30m)
+  const BELL_RADIUS = 30;
+
+  if (bellData && bellData.length) {
+    for (const b of bellData) {
+      const d = pointToSegmentDistanceMeters(
+        b.lng, b.lat,
+        p1.lng, p1.lat,
+        p2.lng, p2.lat
+      );
+      if (d <= BELL_RADIUS) {
+        score += 2;          // 안심벨은 2점 정도로 더 중요하게 (원하면 변경)
+      }
+    }
+  }
+
+  return score;
+}
+
 
   function pickColorByScore(score) {
     if (score >= 3) return "#27ae60";
@@ -296,7 +337,8 @@ if (navigator.geolocation) {
       const p1 = points[i];
       const p2 = points[i + 1];
 
-      const score = calcCctvScoreNearSegment(p1, p2, 80);
+      // const score = calcCctvScoreNearSegment(p1, p2, RADIUS);
+      const score = calcSafetyScoreNearSegment(p1, p2, RADIUS);
       const color = pickColorByScore(score);
 
       const line = new kakao.maps.Polyline({
@@ -351,7 +393,8 @@ if (navigator.geolocation) {
       const p1 = { lat: lat1, lng: lng1 };
       const p2 = { lat: lat2, lng: lng2 };
 
-      const score = calcCctvScoreNearSegment(p1, p2, 80);
+      // const score = calcCctvScoreNearSegment(p1, p2, RADIUS);
+      const score = calcSafetyScoreNearSegment(p1, p2, RADIUS);
       const color = pickColorByScore(score);
 
       const line = new kakao.maps.Polyline({

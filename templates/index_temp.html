@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <title>CCTV Map</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    body { margin: 0; padding: 0; }
+    #map { width: 100%; height: 100vh; }
+
+    .layer-control {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      z-index: 10;
+      background: rgba(255, 255, 255, 0.9);
+      border-radius: 8px;
+      padding: 8px 12px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+      font-size: 13px;
+      line-height: 1.4;
+    }
+    .layer-control label {
+      display: block;
+      margin-bottom: 4px;
+    }
+  </style>
+
+  <!-- services 포함해야 지오코더, 클러스터러 사용 가능 -->
+  <script src="https://dapi.kakao.com/v2/maps/sdk.js?appkey={{ kakao_key }}&libraries=clusterer,services"></script>
+</head>
+<body>
+  <!-- 🚨 신고 중 배너 (여기에 추가) -->
+  <div id="alert-banner" style="
+      display:none;
+      position:fixed;
+      top:0;
+      left:0;
+      right:0;
+      z-index:9999;
+      background:#b91c1c;
+      color:white;
+      padding:10px 16px;
+      font-size:14px;
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+  ">
+      <div>
+          ⚠ 현재 <strong>신고를 진행 중</strong>입니다.
+      </div>
+      <button id="alert-cancel-btn" style="
+          background:white;
+          color:#b91c1c;
+          border:none;
+          padding:6px 12px;
+          border-radius:4px;
+          cursor:pointer;
+          font-weight:bold;
+      ">
+          신고 취소
+      </button>
+  </div>
+  <!-- 🚨 신고 배너 끝 -->
+
+  <div class="layer-control">
+    <label>
+      <input type="checkbox" id="toggle-cctv" checked> CCTV
+      <input type="checkbox" id="toggle-bells" checked> 안심벨
+    </label>
+    
+    <hr>
+    
+    <button id="btn-my-location" style="width:120px; margin-bottom:6px;">📍 내 위치</button>
+
+    <div style="margin-top:6px;">
+      <button id="btn-reset" style="width:120px;">경로 초기화</button>
+      <button id="btn-sort" style="width:120px;">경유지 정렬</button>
+
+      <button id="btn-safe-route" style="width:120px; margin-bottom:6px;">
+        🔒 AI 경로 OFF
+      </button>
+
+    </div>
+    <small style="color:#666;">우클릭하면 경유지 추가됨</small>
+
+    <hr>
+    <button id="btn-record" style="width:120px;">🎙 녹음 시작</button>
+    <span id="rec-status" style="font-size:12px;color:#333;"></span>
+  </div>
+
+  <div id="map"></div>
+
+  <script src="{{ url_for('static', filename='js/map.js') }}"></script>
+</body>
+</html>
