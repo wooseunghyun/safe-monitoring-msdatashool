@@ -2,46 +2,143 @@
 <html lang="ko">
 <head>
   <meta charset="UTF-8" />
-  <title>Firebase Login</title>
+  <title>로그인</title>
 
   <style>
-    /* 🔥 입력창 세로 정렬 */
-    input, button {
-      display: block;
-      margin: 8px 0; /* 위아래 여백 */
-      padding: 10px; /* 안쪽 여백 */
-      width: 250px;  /* 박스 너비 */
+    body {
+      font-family: 'Pretendard', sans-serif;
+      background-color: #f7f7f7;
+      margin: 0;
+      padding: 0;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+    }
+
+    .container {
+      width: 360px;
+      background: #ffffff;
+      padding: 35px 28px;
+      border-radius: 12px;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+    }
+
+    h2 {
+      text-align: center;
+      font-size: 22px;
+      margin-bottom: 20px;
+      color: #333;
+    }
+
+    input {
+      width: 100%;
+      padding: 14px 12px;
+      border-radius: 10px;
+      border: 1px solid #ddd;
+      margin-bottom: 12px;
+      font-size: 14px;
+      transition: 0.2s;
+      box-sizing: border-box;
+    }
+
+    input:focus {
+      border-color: #d60000;
+      box-shadow: 0 0 4px rgba(214,0,0,0.3);
+    }
+
+    button {
+      width: 100%;
+      padding: 14px;
+      border-radius: 10px;
+      border: none;
+      margin-top: 5px;
+      font-size: 15px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: 0.2s;
+    }
+
+    /* 로그인 버튼 — 빨간색 */
+    .login-btn {
+      background-color: #d60000;
+      color: white;
+    }
+    .login-btn:hover {
+      background-color: #ff3333;
+    }
+
+    /* 회원가입 버튼 — 빨간 테두리 */
+    .signup-btn {
+      background-color: transparent;
+      border: 2px solid #d60000;
+      color: #d60000;
+    }
+    .signup-btn:hover {
+      background-color: #ffe6e6;
+    }
+
+    /* 뒤로가기 버튼 */
+    .back-btn {
+      background-color: #ffcccc;
+      color: #660000;
+    }
+    .back-btn:hover {
+      background-color: #ffb3b3;
+    }
+
+    /* 오류 메시지 */
+    #message {
+      text-align: center;
+      color: red;
+      font-size: 13px;
+      margin-top: 12px;
+    }
+
+    /* 회원가입 화면 처음엔 숨기기 */
+    #signup-view {
+      display: none;
     }
   </style>
 </head>
+
 <body>
-  <h1>Firebase 회원가입 + 로그인</h1>
 
-  <!-- 회원가입 -->
-  <h2>회원가입</h2>
+  <div class="container">
 
-  <!-- 보호자 정보 -->
-  <input id="guardian-name" type="text" placeholder="보호자 이름" />
-  <input id="guardian-contact" type="text" placeholder="보호자 연락처" />
+    <!-- 🔥 로그인 화면 -->
+    <div id="login-view">
+      <h2>로그인</h2>
 
-  <!-- 사용자 정보 -->
-  <input id="user-name" type="text" placeholder="사용자 이름" />
-  <input id="signup-email" type="email" placeholder="이메일 입력" />
-  <input id="signup-password" type="password" placeholder="비밀번호 입력" />
-  <button id="signup-btn">회원가입</button>
+      <input id="login-email" type="email" placeholder="아이디를 입력해주세요">
+      <input id="login-password" type="password" placeholder="비밀번호를 입력해주세요">
 
-  <hr>
+      <button id="login-btn" class="login-btn">로그인</button>
+      <button id="go-signup-btn" class="signup-btn">회원가입</button>
 
-  <!-- 로그인 -->
-  <h2>로그인</h2>
-  <input id="login-email" type="email" placeholder="이메일 입력" />
-  <input id="login-password" type="password" placeholder="비밀번호 입력" />
-  <button id="login-btn">로그인</button>
+      <p id="message"></p>
+    </div>
 
-  <p id="message"></p>
 
-  <button id="logout-btn">로그아웃</button>
+    <!-- 🔥 회원가입 화면 -->
+    <div id="signup-view">
+      <h2>회원가입</h2>
 
-  <script src="{{ url_for('static', filename='js/login.js') }}"></script>
+      <input id="guardian-name" type="text" placeholder="보호자 이름">
+      <input id="guardian-contact" type="text" placeholder="보호자 연락처">
+
+      <input id="user-name" type="text" placeholder="사용자 이름">
+      <input id="signup-email" type="email" placeholder="이메일 입력">
+      <input id="signup-password" type="password" placeholder="비밀번호 입력">
+
+      <button id="signup-btn" class="login-btn">회원가입 완료</button>
+      <button id="go-login-btn" class="back-btn">뒤로가기</button>
+
+      <p id="message"></p>
+    </div>
+
+  </div>
+
+<script type="module" src="app.js"></script>
 </body>
 </html>
