@@ -49,6 +49,11 @@ def create_app():
     def dashboard_page():
         return render_template("dashboard_page.html", active_page="dashboard")
 
+
+    @app.route("/login")
+    def firebase_login():
+        return render_template("firebase_login.html")
+
     return app
 
 if __name__ == "__main__":
