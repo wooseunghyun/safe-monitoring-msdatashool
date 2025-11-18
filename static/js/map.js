@@ -22,6 +22,10 @@ kakao.maps.load(function () {
     averageCenter: true,
     minLevel: 6,
   });
+  const cctvIcon = new kakao.maps.MarkerImage(
+    "/static/img/cctv.svg",
+    new kakao.maps.Size(32, 32)   // 아이콘 크기(px)
+  );
 
   fetch("/static/data/cctv.json")
     .then(res => res.json())
@@ -32,7 +36,8 @@ kakao.maps.load(function () {
         .filter(d => d.lat && d.lng)
         .map(d => new kakao.maps.Marker({
           position: new kakao.maps.LatLng(d.lat, d.lng),
-          title: d.name || ""
+          title: d.name || "",
+          image: cctvIcon
         }));
 
       cctvClusterer.addMarkers(cctvMarkers);
@@ -44,14 +49,75 @@ kakao.maps.load(function () {
     else cctvClusterer.clear();
   });
 
+  // 🔸 AI 경로 추천용 데이터
+  let safetyPOIs = [];   // CCTV + 안심벨 합친 배열
+  let aiWaypoints = [];  // Azure OpenAI가 추천한 경유지
+  let useSafeRoute = false;  // AI 경로 모드 ON/OFF
+
+  // =====================================
+  // C. 안심벨 불러와서 표시 + 전역에 저장
+  // =====================================
+  let bellData = [];
+  let bellMarkers = [];
+  const bellIcon = new kakao.maps.MarkerImage(
+    "/static/img/bell.svg",
+    new kakao.maps.Size(32, 32)   // 아이콘 크기(px)
+  );
+  const bellClusterer = new kakao.maps.MarkerClusterer({
+    map: map,
+    averageCenter: true,
+    minLevel: 6,
+  });
+
+  fetch("/static/data/safe_bells.json")
+    .then(res => res.json())
+    .then(data => {
+      bellData = data;
+
+      bellMarkers = data
+        .filter(d => d.lat && d.lng)
+        .map(d => new kakao.maps.Marker({
+          position: new kakao.maps.LatLng(d.lat, d.lng),
+          title: d.name || "",
+          image: bellIcon  // 나중에 안심벨 전용 아이콘 쓰고 싶으면 여기 추가
+        }));
+
+      bellClusterer.addMarkers(bellMarkers);
+      console.log("Bells loaded:", bellMarkers.length);
+
+      // 🔸 CCTV + 안심벨 합쳐서 보관 (AI 경로 추천용)
+      safetyPOIs = cctvData.concat(bellData);
+    });
+
+  // 체크박스로 on/off
+  document.getElementById("toggle-bells").addEventListener("change", function (e) {
+    if (e.target.checked) bellClusterer.addMarkers(bellMarkers);
+    else bellClusterer.clear();
+  });
+
+
+
+
   // =====================================
   // B. 출발/도착 마커 (드래그로 위치 지정)
   // =====================================
+
+  const startIcon = new kakao.maps.MarkerImage(
+    "/static/img/start.svg",
+    new kakao.maps.Size(32, 32)   // 아이콘 크기(px)
+  );
+
+  const endIcon = new kakao.maps.MarkerImage(
+    "/static/img/end.svg",
+    new kakao.maps.Size(32, 32)   // 아이콘 크기(px)
+  );
+
   // 출발 마커
   const startMarker = new kakao.maps.Marker({
     position: new kakao.maps.LatLng(37.5665, 126.9780),
     draggable: true,
     map: map,
+    image: startIcon
   });
 
   // 도착 마커
@@ -59,6 +125,7 @@ kakao.maps.load(function () {
     position: new kakao.maps.LatLng(37.5650, 126.9780),
     draggable: true,
     map: map,
+    image: endIcon
   });
 
   // ✅ 여기서 단 한 번만 routeState 선언
@@ -313,12 +380,20 @@ if (navigator.geolocation) {
   async function refreshRoute() {
     if (!routeState.start || !routeState.end) return;
 
+    // 기본: 사용자가 우클릭으로 넣은 경유지
+    let finalWaypoints = routeState.waypoints ? [...routeState.waypoints] : [];
+
+    // AI 경로 모드가 켜져 있으면, Azure OpenAI가 추천한 경유지를 추가
+    if (useSafeRoute && aiWaypoints.length) {
+      finalWaypoints = finalWaypoints.concat(aiWaypoints);
+    }
+
     if (USE_OSRM) {
       try {
         await drawOsrmRoute(
           routeState.start,
           routeState.end,
-          routeState.waypoints
+          finalWaypoints
         );
         return;
       } catch (err) {
@@ -326,7 +401,7 @@ if (navigator.geolocation) {
       }
     }
 
-    const pts = [routeState.start, ...routeState.waypoints, routeState.end];
+    const pts = [routeState.start, ...finalWaypoints, routeState.end];
     drawRouteColored(pts);
   }
 
@@ -449,6 +524,77 @@ if (navigator.geolocation) {
 
     await refreshRoute();
   });
+
+  // ---------------------------------------
+  // AI 안전 경로 토글 버튼
+  // ---------------------------------------
+  const safeRouteBtn = document.getElementById("btn-safe-route");
+
+  if (safeRouteBtn) {
+    safeRouteBtn.addEventListener("click", async () => {
+      console.log("🟢 safe-route 버튼 클릭됨");   // ← 이 한 줄 추가
+      if (!routeState.start || !routeState.end) {
+        alert("출발지와 도착지가 먼저 설정되어야 합니다.");
+        return;
+      }
+
+      // 👇 OFF → ON 으로 바꾸는 순간에만 서버(Azure OpenAI)에게 요청
+      if (!useSafeRoute) {
+        if (!safetyPOIs.length) {
+          alert("CCTV/안심벨 데이터가 아직 로딩되지 않았습니다. 잠시 후 다시 시도해 주세요.");
+          return;
+        }
+
+        try {
+          safeRouteBtn.textContent = "🔄 AI 경로 계산 중...";
+          safeRouteBtn.disabled = true;
+
+          const payload = {
+            start: routeState.start,
+            end: routeState.end,
+            safety_pois: safetyPOIs,   // CCTV + 안심벨
+          };
+
+          const res = await fetch("/api/safe_route_ai", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+          });
+
+          if (!res.ok) {
+            console.error("safe_route_ai 실패:", await res.text());
+            alert("AI 경로 계산에 실패했습니다.");
+            safeRouteBtn.textContent = "🔒 AI 경로 OFF";
+            safeRouteBtn.disabled = false;
+            return;
+          }
+
+          const data = await res.json();
+          aiWaypoints = data.waypoints || [];
+          console.log("AI가 추천한 경유지:", aiWaypoints);
+
+          useSafeRoute = true;
+          safeRouteBtn.textContent = "🔒 AI 경로 ON";
+          safeRouteBtn.disabled = false;
+
+          await refreshRoute();
+        } catch (e) {
+          console.error("safe_route_ai 호출 오류:", e);
+          alert("AI 경로 호출 중 오류가 발생했습니다.");
+          safeRouteBtn.textContent = "🔒 AI 경로 OFF";
+          safeRouteBtn.disabled = false;
+        }
+      } else {
+        // 👇 이미 ON인 상태 → OFF로 전환
+        useSafeRoute = false;
+        aiWaypoints = [];
+        safeRouteBtn.textContent = "🔒 AI 경로 OFF";
+        await refreshRoute();
+      }
+    });
+  }
+
+
 
   // 지도 우클릭으로 경유지 추가
   kakao.maps.event.addListener(map, "rightclick", async (mouseEvent) => {

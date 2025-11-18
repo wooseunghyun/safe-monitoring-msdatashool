@@ -373,10 +373,12 @@ if __name__ == "__main__":
     import time
 
     print("[Worker] start loop (live_uploads 기반 STT, Azure OpenAI 사용)")
-
+    processed = 0
     while True:
         try:
-            run_once(limit=5)
+            processed = run_once(limit=5)
         except Exception as e:
             print("🔥 [Worker FATAL] run_once 오류:", e)
-        time.sleep(5)
+        
+        if processed == 0:
+            time.sleep(2)  # 5초 → 1~2초 정도로 줄이기
