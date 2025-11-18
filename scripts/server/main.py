@@ -52,7 +52,7 @@ def create_app():
 
     @app.route("/login")
     def firebase_login():
-        return render_template("firebase_login.html")
+        return render_template("login.html")
 
     return app
 
