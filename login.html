@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <title>Firebase Login</title>
+
+  <style>
+    /* 🔥 입력창 세로 정렬 */
+    input, button {
+      display: block;
+      margin: 8px 0; /* 위아래 여백 */
+      padding: 10px; /* 안쪽 여백 */
+      width: 250px;  /* 박스 너비 */
+    }
+  </style>
+</head>
+<body>
+  <h1>Firebase 회원가입 + 로그인</h1>
+
+  <!-- 회원가입 -->
+  <h2>회원가입</h2>
+
+  <!-- 보호자 정보 -->
+  <input id="guardian-name" type="text" placeholder="보호자 이름" />
+  <input id="guardian-contact" type="text" placeholder="보호자 연락처" />
+
+  <!-- 사용자 정보 -->
+  <input id="user-name" type="text" placeholder="사용자 이름" />
+  <input id="signup-email" type="email" placeholder="이메일 입력" />
+  <input id="signup-password" type="password" placeholder="비밀번호 입력" />
+  <button id="signup-btn">회원가입</button>
+
+  <hr>
+
+  <!-- 로그인 -->
+  <h2>로그인</h2>
+  <input id="login-email" type="email" placeholder="이메일 입력" />
+  <input id="login-password" type="password" placeholder="비밀번호 입력" />
+  <button id="login-btn">로그인</button>
+
+  <p id="message"></p>
+
+  <button id="logout-btn">로그아웃</button>
+
+  <script type="module" src="./app.js"></script>
+</body>
+</html>
