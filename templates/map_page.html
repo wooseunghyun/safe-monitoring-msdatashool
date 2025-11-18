@@ -24,15 +24,18 @@
     <div class="top-bar-right">
       <!-- 라우트 이름에 맞게 href는 필요하면 수정해서 써도 돼요 -->
       <a href="/map" class="top-tab active">지도</a>
-      <a href="/powerbi" class="top-tab">Power BI</a>
+      <a href="/dashboard" class="top-tab">Power BI</a>
+      <a href="/login" class="top-tab">Login</a>
     </div>
   </header>
 
   <!-- 신고 중 배너 (빨간 바) -->
   <div id="alert-banner" class="alert-bar" style="display:none;">
-    <div class="alert-bar-left">신고중</div>
+    <div class="alert-bar-left">⚠ 현재 <strong>신고를 진행 중</strong>입니다.</div>
     <button id="alert-cancel-btn" class="alert-cancel-btn">신고 취소</button>
   </div>
+
+
 
   <!-- 메인 레이아웃 -->
   <main class="main-layout">
@@ -138,5 +141,33 @@
       updateToggleVisibility();
     })();
   </script>
+
+  <script>
+  const directAlertBtn = document.getElementById("btn-direct-alert");   // 바로 신고 버튼
+  const alertBanner = document.getElementById("alert-banner");          // 상단 빨간바
+  const alertCancelBtn = document.getElementById("alert-cancel-btn");   // 취소 버튼
+
+  if (directAlertBtn) {
+    directAlertBtn.addEventListener("click", () => {
+      // UI 즉시 반응
+      alertBanner.style.display = "flex";
+
+      // 여기에서 백엔드 신고 API 호출 넣고 싶으면 추가 (비동기)
+      // fetch("/alerts/direct", { method: "POST" })
+      //   .then(...)
+      //   .catch(...);
+    });
+  }
+
+  if (alertCancelBtn) {
+    alertCancelBtn.addEventListener("click", () => {
+      alertBanner.style.display = "none";
+      
+      // 취소 호출 넣고 싶으면
+      // fetch("/alerts/cancel", { method: "POST" });
+    });
+  }
+</script>
+
 </body>
 </html>

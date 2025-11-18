@@ -13,16 +13,26 @@
 </head>
 <body>
 
-  <!-- 상단 네비 -->
-  <header class="top-nav">
-    <div class="top-nav__left">
-      <div class="top-nav__logo">S</div>
+  <!-- ✅ 예전이랑 동일하게: top-bar / top-tab -->
+  <header class="top-bar">
+    <div class="top-bar-left">
+      <div class="top-logo">S</div>
       <span>Safe Monitoring</span>
     </div>
 
-    <div class="top-nav__tabs">
-      <a href="/map" class="nav-btn {% if active_page=='map' %}active{% endif %}">지도</a>
-      <a href="/dashboard" class="nav-btn {% if active_page=='dashboard' %}active{% endif %}">Power BI</a>
+    <div class="top-bar-right">
+      <a href="/map"
+         class="top-tab {% if active_page=='map' %}active{% endif %}">
+        지도
+      </a>
+      <a href="/dashboard"
+         class="top-tab {% if active_page=='dashboard' %}active{% endif %}">
+        Power BI
+      </a>
+      <a href="/login"
+         class="top-tab {% if active_page=='login' %}active{% endif %}">
+        Login
+      </a>
     </div>
   </header>
 
