@@ -10,6 +10,7 @@ from scripts.server.routes.alerts import bp as alerts_bp
 from scripts.server.routes.safe_route_ai import bp as safe_route_ai_bp
 
 import pathlib
+import os
 
 def create_app():
     app = Flask(
@@ -58,4 +59,10 @@ def create_app():
 
 if __name__ == "__main__":
     app = create_app()
-    app.run(debug=True)
+    # app.run(debug=True)
+
+    app.run(
+        host="0.0.0.0",
+        port=int(os.getenv("PORT", "5000")),
+        debug=False
+    )
