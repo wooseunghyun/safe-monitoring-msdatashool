@@ -2,15 +2,17 @@
 {% set active_page = "dashboard" %}
 
 {% block content %}
+<div class="dashboard-page">
 <div class="dashboard-card">
   <h2>치안 데이터 Power BI 대시보드</h2>
   <p>위험 신고 · 위치 데이터 시각화</p>
 
   <div class="pb-frame-wrap">
     <iframe 
-      src="https://app.powerbi.com/view?r=YOUR_REPORT_ID"
+      src="https://app.powerbi.com/reportEmbed?reportId=c5168db2-6371-4db5-bf7f-e50f1147cf1a&autoAuth=true&ctid=8f91900e-dfe5-480a-9a92-56239f989454&pageView=FitToWidth&navContentPaneEnabled=false"
       allowfullscreen>
     </iframe>
   </div>
+</div>
 </div>
 {% endblock %}

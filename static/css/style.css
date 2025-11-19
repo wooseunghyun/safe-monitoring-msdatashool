@@ -433,3 +433,32 @@ body {
 
 
 }
+/* 전체 영역 가운데 정렬 */
+.dashboard-page {
+  display: flex;
+  justify-content: center;
+}
+
+/* 내용 카드 */
+.dashboard-card {
+  width: 100%;
+  max-width: 1280px;   /* 너무 넓어지지 않게 상한만 줌 */
+  padding: 24px;
+}
+
+/* Power BI 프레임 비율(16:9) 유지하면서 반응형 */
+.pb-frame-wrap {
+  position: relative;
+  width: 100%;
+  padding-top: 56.25%;   /* 16:9 비율 = 9/16 * 100 */
+  margin-top: 16px;
+}
+
+.pb-frame-wrap iframe {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  border: none;
+}
